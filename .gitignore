@@ -1,0 +1,4 @@
+*.log
+__pycache__
+cdk.out
+systems.txt
