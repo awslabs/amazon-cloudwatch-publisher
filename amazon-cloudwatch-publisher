@@ -1,0 +1,468 @@
+#!/usr/bin/env python3
+
+
+"""
+Copyright 2019 Amazon.com, Inc. or its affiliates. All Rights Reserved.
+
+Licensed under the Apache License, Version 2.0 (the "License").
+You may not use this file except in compliance with the License.
+A copy of the License is located at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+or in the "license" file accompanying this file. This file is distributed
+on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either
+express or implied. See the License for the specific language governing
+permissions and limitations under the License.
+"""
+
+
+# Standard library imports
+import datetime
+import json
+import logging
+import logging.handlers
+import os
+import queue
+import socket
+import subprocess
+import sys
+import threading
+import time
+
+# Third-party imports
+import boto3
+import botocore
+import psutil
+import timeloop
+
+
+# Log rotation parameters match those of the default CloudWatch Agent
+DEFAULT_MAX_LOG_SIZE = 100 * 1024 * 1024
+DEFAULT_MAX_LOG_COUNT = 5
+
+# Default config and log locations mirror those of the CloudWatch Agent
+DEFAULT_CONFIG_FILENAME = '/opt/aws/amazon-cloudwatch-publisher/etc/amazon-cloudwatch-publisher.json'
+DEFAULT_LOG_FILENAME = '/opt/aws/amazon-cloudwatch-publisher/logs/amazon-cloudwatch-publisher.log'
+
+# Number of seconds between refreshes of the temporary crednetials issued by
+# Cognito; they expire after 3600 seconds, so this rate should ensure freshness
+DEFAULT_CREDENTIALS_INTERVAL = 1800
+
+# Reasonable values for metric and logging items when none are provided in config
+DEFAULT_METRICS_INTERVAL = 300
+DEFAULT_NAMESPACE = 'System/Default'
+
+DEFAULT_LOGS_INTERVAL = 10
+DEFAULT_LOGS_GROUP_NAME = '/system/default/{instance}'
+
+# This value matches the maximum number of log streams that can be
+# queried in a single API call; while that could be fixed with looping,
+# these seems a reasonable cap to prevent potential performance problems
+MAX_LOGS_COLLECTION_LIST = 50
+
+# Special sentinel value that indicates a log entry represents
+# the system journal, and not a normal file to be tailed; this
+# should never matche an actual configured file to be followed
+SYSTEM_JOURNAL_FLAG = 'system-journal-flag'
+
+
+# Either take the config file path off the command line or use the default location
+try:
+    config_filename = sys.argv[1]
+except IndexError:
+    config_filename = DEFAULT_CONFIG_FILENAME
+
+# If the config file cannot be opened, set up a default config object
+# which allows simplication of the subsequent config value reading code
+try:
+    config = json.load(open(config_filename))
+except OSError:
+    config = {'agent': {}, 'metrics': {}, 'logs': {}}
+
+
+# Read a few config values, setting defaults if not provided
+credentials_interval = DEFAULT_CREDENTIALS_INTERVAL
+metric_interval = config['agent'].get('metrics_collection_interval', DEFAULT_METRICS_INTERVAL)
+logs_interval = config['agent'].get('logs_collection_interval', DEFAULT_LOGS_INTERVAL)
+
+
+# Global object that keeps the Boto3 session with Cognito-provided credentials
+client_session = None
+
+# Unique hardware-based identifier for this instance of the publisher
+instance_id = None
+
+# Global objects that keep info on the metrics and logs being collected
+metric_table = {}
+log_table = {}
+
+
+def configure_logging():
+    """Set up logging for the script itself."""
+    log_filename = config['agent'].get('logfile', DEFAULT_LOG_FILENAME)
+    log_format = '%(asctime)s : %(levelname)s : %(message)s'
+    log_level = logging.DEBUG if config['agent'].get('debug') else logging.INFO
+    log_max_size = DEFAULT_MAX_LOG_SIZE
+    log_max_backups = DEFAULT_MAX_LOG_SIZE
+    log_handler = logging.handlers.RotatingFileHandler(log_filename, maxBytes=log_max_size, backupCount=log_max_backups)
+    logging.basicConfig(handlers=[log_handler], format=log_format, level=log_level)
+
+
+def set_instance_id():
+    """Construct a unique identifier for this instance."""
+    instance = config['agent'].get('instance', {})
+    prefix = instance.get('prefix', 'sys')
+    serial = instance.get('serial')
+    # Only use the shell command if a fixed serial number is not provided in the config
+    if not serial:
+        # If no command is given simply use a bunch of zeros for the serail number
+        command = instance.get('command', 'echo 000000000000')
+        output = subprocess.run(command, shell=True, capture_output=True, encoding='UTF-8')
+        serial = output.stdout.strip().lower()
+    # Set the shared variable to the generated ID; this is easier than passing it
+    # around everywhere, and more performance than re-generating it in multiple places
+    global instance_id
+    instance_id = '{0}-{1}'.format(prefix, serial)
+    logging.info('Instance ID is {0}'.format(instance_id))
+
+
+def set_credentials():
+    """Set up the boto3 session with valid credentials."""
+    global client_session
+    # If no Cognito authentication info is present, use a default boto3 session,
+    # which reads the credential info from the same places the AWS CLI does
+    if 'authentication' not in config['agent']:
+        logging.info('No authentication section in config, using credentials from environment')
+        client_session = boto3.session.Session()
+        return
+    # Otherwise log in to Cognito to get credentials using the given username/password combo
+    region = config['agent']['region']
+    auth = config['agent']['authentication']
+    client_config = botocore.config.Config(signature_version=botocore.UNSIGNED, region_name=region)
+    cognito_idp = boto3.client('cognito-idp', config=client_config)
+    cognito_id = boto3.client('cognito-identity', config=client_config)
+    username = instance_id
+    logging.info('Getting new credentials for {0} in user pool {1}'.format(username, auth['userPoolId']))
+    auth_flow = 'USER_PASSWORD_AUTH'
+    auth_params = {'USERNAME': username, 'PASSWORD': auth['password']}
+    response = cognito_idp.initiate_auth(ClientId=auth['appClientId'], AuthFlow=auth_flow, AuthParameters=auth_params)
+    id_login = 'cognito-idp.{0}.amazonaws.com/{1}'.format(region, auth['userPoolId'])
+    id_token = response['AuthenticationResult']['IdToken']
+    login_map = {id_login: id_token}
+    response = cognito_id.get_id(AccountId=auth['accountId'], IdentityPoolId=auth['identityPoolId'], Logins=login_map)
+    response = cognito_id.get_credentials_for_identity(IdentityId=response['IdentityId'], Logins=login_map)
+    # Set up a boto3 session using the temporary credentials issued to the authenticated user
+    session_params = {
+        'aws_access_key_id': response['Credentials']['AccessKeyId'],
+        'aws_secret_access_key': response['Credentials']['SecretKey'],
+        'aws_session_token': response['Credentials']['SessionToken'],
+        'region_name': region
+    }
+    client_session = boto3.session.Session(**session_params)
+
+
+def set_metric_info(name, unit):
+    """
+    Add a metric record to the table that will eventually be sent to CloudWatch.
+    @param name: Metric name identifier
+    @param unit: Metric unit enumeration; for valid options, see
+                 https://docs.aws.amazon.com/cli/latest/reference/cloudwatch/put-metric-data.html
+    """
+    logging.info('Collecting metric {0}'.format(name))
+    metric_table[name] = {'Value': 0.0, 'Data': {'MetricName': name, 'Unit': unit, 'Value': 0.0}}
+
+
+def initialize_metric_table():
+    """Populate template records for each metric to be collected."""
+    set_metric_info('CPUUtilization', 'Percent')
+    set_metric_info('CPUCount', 'Count')
+    set_metric_info('MemoryUtilization', 'Percent')
+    set_metric_info('MemoryUsed', 'Bytes')
+    set_metric_info('MemoryAvailable', 'Bytes')
+    set_metric_info('DiskReadBytes', 'Bytes')
+    set_metric_info('DiskWriteBytes', 'Bytes')
+    set_metric_info('DiskReadOps', 'Count')
+    set_metric_info('DiskWriteOps', 'Count')
+    set_metric_info('NetworkIn', 'Bytes')
+    set_metric_info('NetworkOut', 'Bytes')
+    set_metric_info('NetworkPacketsIn', 'Count')
+    set_metric_info('NetworkPacketsOut', 'Count')
+    # Executing an initial gather of all metrics ensures the values that need to be computed
+    # based on previous values will be initialized, and thus valid for subsequent calls
+    refresh_metric_table()
+    hostname = socket.gethostname()
+    # Each metric has two dimenstions: unique instance ID, and hostname
+    dimensions = [{'Name': 'InstanceId', 'Value': instance_id}, {'Name': 'Hostname', 'Value': hostname}]
+    for metric in metric_table.values():
+        metric['Data']['Dimensions'] = dimensions
+
+
+def set_absolute_metric(name, value):
+    """
+    Writes an absolute metric value (one that doesn't need comparison
+    to a previous measurement) to the table to be sent to CloudWatch.
+    @param name: Metric name identifier
+    @param value: Value to be set
+    """
+    metric_table[name]['Value'] = value
+    metric_table[name]['Data']['Value'] = value
+
+
+def set_relative_metric(name, value):
+    """
+    Writes a relative metric value (one that is a delta from the
+    previously-measured value) to the table to be sent to CloudWatch.
+    @param name: Metric name identifier
+    @param value: Value to be set
+    """
+    prev_value = metric_table[name]['Value']
+    metric_table[name]['Value'] = value
+    # Averaging over the measurement interval mimics the behavior of the default agent
+    metric_table[name]['Data']['Value'] = (value - prev_value) / metric_interval
+
+
+def set_cpu_metrics():
+    """Write CPU info into the metric table."""
+    set_absolute_metric('CPUUtilization', psutil.cpu_percent())
+    set_absolute_metric('CPUCount', psutil.cpu_count())
+
+
+def set_memory_metrics():
+    """Write memory info into the metric table."""
+    memory = psutil.virtual_memory()
+    set_absolute_metric('MemoryUtilization', memory.percent)
+    set_absolute_metric('MemoryUsed', memory.used)
+    set_absolute_metric('MemoryAvailable', memory.available)
+
+
+def set_disk_metrics():
+    """Write disk info into the metric table."""
+    disk_io = psutil.disk_io_counters()
+    set_relative_metric('DiskReadBytes', disk_io.read_bytes)
+    set_relative_metric('DiskWriteBytes', disk_io.write_bytes)
+    set_relative_metric('DiskReadOps', disk_io.read_count)
+    set_relative_metric('DiskWriteOps', disk_io.write_count)
+
+
+def set_network_metrics():
+    """Write network info into the metric table."""
+    net_io = psutil.net_io_counters()
+    set_relative_metric('NetworkIn', net_io.bytes_recv)
+    set_relative_metric('NetworkOut', net_io.bytes_sent)
+    set_relative_metric('NetworkPacketsIn', net_io.packets_recv)
+    set_relative_metric('NetworkPacketsOut', net_io.packets_sent)
+
+
+def refresh_metric_table():
+    """Write all metrics into the metric table."""
+    set_cpu_metrics()
+    set_memory_metrics()
+    set_disk_metrics()
+    set_network_metrics()
+
+
+def push_metric_data():
+    """Send the current metric table to CloudWatch."""
+    cloudwatch = client_session.client('cloudwatch')
+    namespace = config['metrics'].get('namespace', DEFAULT_NAMESPACE)
+    # Need to turn the table into a list to match the API format
+    metric_data = [m['Data'] for m in metric_table.values()]
+    logging.debug('Putting metric data: {0}'.format(metric_data))
+    response = cloudwatch.put_metric_data(Namespace=namespace, MetricData=metric_data)
+    logging.debug('Put metric data response: {0}'.format(response))
+
+
+def get_log_stream_list():
+    """
+    Read the set of log files to be pushed, and their configuration options.
+    @return: List of log file configuration data
+    """
+    try:
+        log_file_paths = [l['file_path'] for l in config['logs']['logs_collected']['files']['collect_list']]
+        if config['logs']['logs_collected'].get('journal'):
+            log_file_paths.append(SYSTEM_JOURNAL_FLAG)
+    except KeyError:
+        log_file_paths = []
+    return [(f, os.path.basename(f)) for f in log_file_paths[:MAX_LOGS_COLLECTION_LIST]]
+
+
+def handle_log_file(file_path, name):
+    """
+    Tail a single log file until the publisher is terminated; this
+    function is run in a separate thread, one per file to be followed.
+    @param file_path: Full path and file name of the tracked file
+    @param name: Bare name of log file
+    """
+    # Check if this log is the special system journal entry; if so,
+    # use the journalctl system call to read its entries (since they
+    # can't be otherwise read as a normal text file)
+    if file_path == SYSTEM_JOURNAL_FLAG:
+        tail_command = ('journalctl', '-q', '-n', '0', '-f')
+    # Otherwise the normal tail command will do the job while handling
+    # edge cases like rotation and files that don't exist at the start
+    else:
+        tail_command = ('tail', '-n', '0', '-F', file_path)
+    output = subprocess.Popen(tail_command, stdout=subprocess.PIPE, encoding='UTF-8')
+    # Loop forever reading lines one at a time from the file and
+    # adding them to the queue of lines to be sent to CloudWatch
+    while True:
+        message = output.stdout.readline()
+        if not message:
+            return
+        # Instead of trying to parse a timestamp from the log line, just note the time it
+        # was tailed (in epoch milliseconds); this should be close enough for most purposes
+        timestamp = int(time.time() * 1000)
+        event = {'timestamp': timestamp, 'message': message.strip()}
+        log_table[name]['Queue'].put(event)
+
+
+def create_log_group(cloudwatch_logs, log_group_name):
+    """
+    Create the log group for this system, if it does not already exist.
+    @param cloudwatch_logs: Boto3 client for logs
+    @param log_group_name: Identifier for the log group to be created
+    """
+    logging.info('Log group name is {0}'.format(log_group_name))
+    try:
+        response = cloudwatch_logs.create_log_group(logGroupName=log_group_name)
+        logging.debug('Create log group response: {0}'.format(response))
+    except Exception as error:
+        logging.debug('Unable to create log group: {0}'.format(error))
+
+
+def create_log_stream(cloudwatch_logs, log_group_name, log_stream_name):
+    """
+    Create a log stream for a particular log file, if it does not already exist.
+    @param cloudwatch_logs: Boto3 client for logs
+    @param log_group_name: Identifier for the log group to create the stream under
+    @param log_stream_name: Identifier for the log stream to be created
+    """
+    logging.info('Log stream name is {0}'.format(log_stream_name))
+    try:
+        response = cloudwatch_logs.create_log_stream(logGroupName=log_group_name, logStreamName=log_stream_name)
+        logging.debug('Create log stream response: {0}'.format(response))
+    except Exception as error:
+        logging.debug('Unable to create log stream: {0}'.format(error))
+
+
+def get_log_stream_tokens(cloudwatch_logs, log_group_name, log_stream_list):
+    """
+    Fetch the sequence tokens for all log streams and write them to the log data table.
+    @param cloudwatch_logs: Boto3 client for logs
+    @param log_group_name: Identifier for the log group
+    @param log_stream_list: List of all log streams to get tokens for
+    """
+    logging.debug('Getting log stream tokens for {0}'.format(log_group_name))
+    response = cloudwatch_logs.describe_log_streams(logGroupName=log_group_name, limit=MAX_LOGS_COLLECTION_LIST)
+    logging.debug('Describe log streams response: {0}'.format(response))
+    for log_stream in response['logStreams']:
+        name = log_stream['logStreamName']
+        token = log_stream.get('uploadSequenceToken')
+        # Only write the token if it exists (i.e. if the log stream has prior entries in it)
+        if token:
+            log_table[name]['Data']['sequenceToken'] = token
+
+
+def initialize_log_item(cloudwatch_logs, log_group_name, file_path, name):
+    """
+    Set up the pieces required to follow a log file.
+    @param cloudwatch_logs: Boto3 client for logs
+    @param log_group_name: Identifier for the log group under which the log file will be stored
+    @param file_path: Full path and file name of the tracked file
+    @param name: Bare name of log file
+    """
+    logging.info('Collecting logs from {0}'.format(file_path))
+    log_table[name] = {}
+    log_table[name]['Data'] = {'logGroupName': log_group_name, 'logStreamName': name}
+    log_table[name]['Queue'] = queue.Queue()
+    create_log_stream(cloudwatch_logs, log_group_name, name)
+
+
+def initialize_log_table():
+    """Populate the global log table object with initial values and start the threads that follow log files."""
+    cloudwatch_logs = client_session.client('logs')
+    log_group_name = config['logs'].get('log_group_name', DEFAULT_LOGS_GROUP_NAME)
+    log_group_name = log_group_name.format(instance_id=instance_id)
+    create_log_group(cloudwatch_logs, log_group_name)
+    log_stream_list = get_log_stream_list()
+    for file_path, name in log_stream_list:
+        initialize_log_item(cloudwatch_logs, log_group_name, file_path, name)
+    get_log_stream_tokens(cloudwatch_logs, log_group_name, log_stream_list)
+    for log_stream in log_stream_list:
+        threading.Thread(target=handle_log_file, args=log_stream).start()
+
+
+def get_log_events(name, log_item):
+    """
+    Build the set of all new log events from a log file by
+    emptying the event queue and shoving the output into a list.
+    @param log_item: Particular log file to check for events
+    @return: List of all new log events from the given log file
+    """
+    log_events = []
+    while True:
+        try:
+            log_events.append(log_item['Queue'].get_nowait())
+        except queue.Empty:
+            return log_events
+
+
+def push_log_data():
+    """Loop through all log files, find new events, and push them to CloudWatch."""
+    cloudwatch_logs = client_session.client('logs')
+    for name, log_item in log_table.items():
+        log_events = get_log_events(name, log_item)
+        # Don't bother hitting the API if there are no events to report
+        if log_events:
+            log_item['Data']['logEvents'] = log_events
+            logging.debug('Putting log events: {0}'.format(log_events))
+            response = cloudwatch_logs.put_log_events(**log_item['Data'])
+            logging.debug('Put log events response: {0}'.format(response))
+            log_item['Data']['sequenceToken'] = response['nextSequenceToken']
+
+
+# Do one-time setup functions
+configure_logging()
+set_instance_id()
+set_credentials()
+
+# Populate the global data tables
+initialize_metric_table()
+initialize_log_table()
+
+
+# Build out the object that managers period function calls
+tl = timeloop.Timeloop()
+
+
+@tl.job(interval=datetime.timedelta(seconds=credentials_interval))
+def refresh_credentials():
+    """Ensure the AWS credentials are fresh."""
+    try:
+        set_credentials()
+    except Exception as error:
+        logging.warning('Error while refreshing credentials: {0}'.format(error))
+
+
+@tl.job(interval=datetime.timedelta(seconds=metric_interval))
+def put_metrics():
+    """Gather the latest metric values, the publish them to CloudWatch."""
+    try:
+        refresh_metric_table()
+        push_metric_data()
+    except Exception as error:
+        logging.warning('Error while pushing metrics: {0}'.format(error))
+
+
+@tl.job(interval=datetime.timedelta(seconds=logs_interval))
+def put_logs():
+    """Publish new log events to CloudWatch."""
+    try:
+        push_log_data()
+    except Exception as error:
+        logging.warning('Error while pushing logs: {0}'.format(error))
+
+
+# Run the above periodic functions forever
+tl.start(block=True)

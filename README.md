@@ -5,7 +5,7 @@ out-of-the-box support is limited to AWS-native resources (e.g. EC2 instances) o
 the [CloudWatch Agent](https://docs.aws.amazon.com/AmazonCloudWatch/latest/monitoring/Install-CloudWatch-Agent.html).
 
 The purpose of this tool is to expand CloudWatch monitoring support to additional platforms, essentially any that
-can run Python. It has been explicitly tested (and includes daemon installers for) on MacOS and a Raspberry Pi.
+can run Python. It has been explicitly tested on (and includes daemon installers for) MacOS and the Raspberry Pi.
 
 
 ## Getting Started
@@ -123,16 +123,9 @@ no logs will be pushed.
    *  `files`: Contains one subkey, `collect_list`, which is array of objects with the following keys:
 
       *  `file_path`: Full path to the log file to push to CloudWatch
-      *  `include_patterns`: TBD
-      *  `exclude_patterns`: TBD
-      *  `retention_in_days`: TBD (see https://docs.aws.amazon.com/cli/latest/reference/logs/put-retention-policy.html)
 
-   *  `journal`: If provided, and if the instance supports it, pushes the system journal to the log
-      using the `journalctl` command. The following subkeys are supported:
-
-      *  `include_patterns`: TBD
-      *  `exclude_patterns`: TBD
-      *  `retention_in_days`: TBD (see https://docs.aws.amazon.com/cli/latest/reference/logs/put-retention-policy.html)
+   *  `journal`: If set to true, and if the instance supports it, pushes the system journal to the log
+      using the `journalctl` command.
 
 *  `log_group_name`: Identifier to use for the log group under which each log file will be
    published. Should be unique per instance. The easiest way to do this is to put `{instance_id}`
@@ -231,7 +224,8 @@ Pull requests are welcomed. Here are a few items that would be nice to get imple
 *  Implement include and exclude patterns for logs
 *  Retention options for log groups
 
-Please lint all changes with `flake8 --max-line-length=120` before submitting.
+Please lint all changes with `flake8 --max-line-length=120` before submitting. Also review
+the [Contributing Guidelines](CONTRIBUTING.md) and the [Code of Conduct](CODE_OF_CONDUCT.md).
 
 
 ## Authors
@@ -241,4 +235,4 @@ Please lint all changes with `flake8 --max-line-length=120` before submitting.
 
 ## License
 
-This project is licensed under the Apache 2.0 License. See the [LICENSE.md](LICENSE.md) file for details.
+This project is licensed under the Apache 2.0 License. See the [LICENSE](LICENSE) file for details.
