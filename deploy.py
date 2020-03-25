@@ -7,11 +7,46 @@
 # Standard library imports
 import subprocess
 import sys
+import os.path
 
 # Third-party imports
 import boto3
 import passgen
 
+# This checks for the systems.txt file and asks to create it
+# if it does not exist. This will also add the instance id
+# to the system file to create the user. This file can be updated to add more users.
+
+def check_for_systxt():
+    if os.path.isfile('systems.txt'):
+        print ("systems.txt File exist")
+    else:
+            print ("The systems.txt File not exist")
+
+            answer = input("Would You like to create the systems.txt file? (y/n)")
+            if answer.lower() in ["y","yes"]:
+                    # get seria.l number to generate instance and write it to the systems.txt to create it as a user.
+                    cmd = "system_profiler SPHardwareDataType | grep 'Serial' | awk '{print $NF}'"
+                    result = subprocess.run(cmd, stdout=subprocess.PIPE, shell=True, check=True)
+                    serial_number = result.stdout.decode().strip().lower()
+                    #print(serial_number)
+                    fi=open("systems.txt","w+")
+                    fi.write("osx-%s" % (serial_number))
+                    fi.close()
+
+
+            elif answer.lower() in ["n","no"]:
+                # Do other stuff
+                print('Please create the systems.txt')
+                exit()
+
+            else:
+                # Handle "wrong" input
+                # ... error handling ...
+                print("Error: Input {answer} unrecognise.")
+                reload(check_for_systxt)
+
+check_for_systxt()
 
 # Dictionary to collect the output parameters from running CDK deploy
 outputs = {}

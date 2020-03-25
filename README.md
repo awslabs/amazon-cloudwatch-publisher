@@ -196,7 +196,7 @@ when installation is done, and on all subsequent reboots.
 
 The uninstall process is platform dependent, but for the two current platforms, run the following:
 
-*  MacOS: `sudo launchctl unload /Library/LaunchDaemons/com.amazonaws.amazon-cloudwatch-publisher.plist`
+*  MacOS:  `uninstall-osx.bash`
 *  Raspberry Pi: `systemctl disable amazon-cloudwatch-publisher`
 
 
