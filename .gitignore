@@ -2,3 +2,4 @@
 __pycache__
 cdk.out
 systems.txt
+.DS_Store
