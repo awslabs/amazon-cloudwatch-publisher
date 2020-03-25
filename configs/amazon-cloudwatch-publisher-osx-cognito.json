@@ -4,7 +4,13 @@
       "prefix": "osx",
       "command": "system_profiler SPHardwareDataType | grep Serial | awk '{print $NF}'"
     },
-    "run_as_user": "_cwpublisher",
+    "authentication": {
+      "accountId": "ACCOUNT_ID",
+      "userPoolId": "USER_POOL_ID",
+      "identityPoolId": "IDENTITY_POOL_ID",
+      "appClientId": "APP_CLIENT_ID",
+      "password": "PASSWORD"
+    },
     "region": "REGION",
     "metrics_collection_interval": 60,
     "logs_collection_interval": 10,
