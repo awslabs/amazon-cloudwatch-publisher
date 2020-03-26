@@ -86,7 +86,7 @@ elif [[ $cogn_ans =~ ^([nN][oO]|[nN])$ ]]; then
 
   echo "Please Note this method should not be used on Production Systems."
   #Copy source cloudwatch basic agent file to config Destination
-  cp configs/amazon-cloudwatch-publisher-osx.json /opt/aws/amazon-cloudwatch-publisher/etc/amazon-cloudwatch-publisher.json
+  cp configs/amazon-cloudwatch-publisher-osx-credentials.json /opt/aws/amazon-cloudwatch-publisher/etc/amazon-cloudwatch-publisher.json
 
 
   # execute credential installation function
@@ -113,7 +113,6 @@ mkdir -p /opt/aws/amazon-cloudwatch-publisher/bin/
 mkdir -p /opt/aws/amazon-cloudwatch-publisher/etc/
 mkdir -p /opt/aws/amazon-cloudwatch-publisher/logs/
 cp amazon-cloudwatch-publisher /opt/aws/amazon-cloudwatch-publisher/bin/
-cp configs/amazon-cloudwatch-publisher-osx.json /opt/aws/amazon-cloudwatch-publisher/etc/amazon-cloudwatch-publisher.json
 chown -R _cwpublisher: /opt/aws/amazon-cloudwatch-publisher
 chmod -R u+rwX,g-rwx,o-rwx /opt/aws/amazon-cloudwatch-publisher
 

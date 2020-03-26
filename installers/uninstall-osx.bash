@@ -5,14 +5,9 @@ set -e
 function uninstall_answer () {
 
 read -p "
-Are you sure you want to uninstall CloudWatch Publisher?: (Y/N)(Don't know what this is? Press 'n' then enter) " unin_ans
+Are you sure you want to uninstall CloudWatch Publisher?: (y)" unin_ans
 
-if [ -z "$unin_ans" ]; then
-
-  read -p "
-	Please Enter (Y/y) for yes or (N/n) for No, are you sure you want to uninstall CloudWatch Publisher?: (Don't Know what this is? Press 'n' then enter" unin_ans
-
-elif [[ $unin_ans =~ ^([yY][eE][sS]|[yY])$ ]]; then
+if [[ $unin_ans =~ ^([yY][eE][sS]|[yY])$ ]]; then
 
   # Stop and Uninstall the publisher as a daemon that runs at boot
   launchctl stop com.amazonaws.amazon-cloudwatch-publisher
@@ -27,12 +22,11 @@ elif [[ $unin_ans =~ ^([yY][eE][sS]|[yY])$ ]]; then
 
 
 
-elif [[ $unin_ans =~ ^([nN][oO]|[nN])$ ]]; then
+else
   echo "
   Canceling this uninstall"
   exit 1;
 
-uninstall_answer
 
 fi
 
