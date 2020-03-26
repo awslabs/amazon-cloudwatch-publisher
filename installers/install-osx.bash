@@ -3,40 +3,47 @@ set -e
 
 function install_cw_creds () {
   read -p "
-    Setup your AWS CLI credentials now for the _cwpublisher user?: (this can be done later using 'aws configure') (Y/N)" cwenv_ans
+    Setup your AWS CLI credentials now for the _cwpublisher user?: (this can be done later using 'aws configure') (y/n)" cwenv_ans
 
   if [[ $cwenv_ans =~ ^([yY][eE][sS]|[yY])$ ]]; then
+   awsclicheck=`/usr/bin/which aws`
 
-  # Set up aws cli and environment variables
-  read -p "AWS Access Key ID:" cw_access_key_id
-  read -s -p "AWS Secret Access Key:" cw_secret_access_key
-  read -p "
-  Default region name:" cw_region
-  read -p "Default output format:" cw_output_format
+    if [[ -z $awsclicheck  ]]; then
+        # Set up aws cli and environment variables
+        read -p "AWS Access Key ID:" cw_access_key_id
+        read -s -p "AWS Secret Access Key:" cw_secret_access_key
+        read -p "
+        Default region name:" cw_region
+        read -p "Default output format:" cw_output_format
 
-# create credential file
-if [[ ! -d /Users/_cwpublisher/.aws/ ]];then
-mkdir /Users/_cwpublisher/.aws/
-fi
+        # create credential file
+        if [[ ! -d /Users/_cwpublisher/.aws/ ]]; then
+        mkdir /Users/_cwpublisher/.aws/
+        fi
 
-cat << EOF > /Users/_cwpublisher/.aws/credentials
-[default]
-aws_access_key_id = $cw_access_key_id
-aws_secret_access_key = $cw_secret_access_key
+        cat << EOF > /Users/_cwpublisher/.aws/credentials
+        [default]
+        aws_access_key_id = $cw_access_key_id
+        aws_secret_access_key = $cw_secret_access_key
 EOF
 
-# create config file
-cat << EOF > /Users/_cwpublisher/.aws/config
-[default]
-region = $cw_region
-output = $cw_output_format
+        # create config file
+        cat << EOF > /Users/_cwpublisher/.aws/config
+        [default]
+        region = $cw_region
+        output = $cw_output_format
 EOF
 
-# Set owner permissions
-chown -R _cwpublisher:staff /Users/_cwpublisher/.aws
-chmod 600 /Users/_cwpublisher/.aws/config
-chmod 600 /Users/_cwpublisher/.aws/credentials
+        # Set owner permissions
+        chown -R _cwpublisher /Users/_cwpublisher/.aws
+        chmod 600 /Users/_cwpublisher/.aws/config
+        chmod 600 /Users/_cwpublisher/.aws/credentials
 
+      else
+
+       sudo -H -u _cwpublisher aws configure
+
+      fi
 echo "configuring LaunchAgent..."
 
   elif [[ $cogn_ans =~ ^([nN][oO]|[nN])$ ]]; then
@@ -54,13 +61,8 @@ read -p "
 Would you like to use cognito authentication?: (Y/N)(Don't know what this is? Press 'n' then enter) " cogn_ans
 
 # if the response not set ask question again
-if [ -z "$cogn_ans" ]; then
-
-  read -p "
-	Please Enter (Y/y) for yes or (N/n) for No, Would you like to use cognito authentication?: (Don't Know what this is? Press 'n' then enter" cogn_ans
-
 #Actions if 'y' is entered
-elif [[ $cogn_ans =~ ^([yY][eE][sS]|[yY])$ ]]; then
+if [[ $cogn_ans =~ ^([yY][eE][sS]|[yY])$ ]]; then
   #Copy source cloudwatch agent - cognito file to config Destination
   cp configs/amazon-cloudwatch-publisher-osx-cognito.json /opt/aws/amazon-cloudwatch-publisher/etc/amazon-cloudwatch-publisher.json
 

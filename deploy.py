@@ -25,13 +25,14 @@ def check_for_systxt():
 
             answer = input("Would You like to create the systems.txt file? (y/n)")
             if answer.lower() in ["y","yes"]:
+                    firstuser = print ("Create a username to add to the file: eg. osx-5e4d3c2b1a")
                     # get seria.l number to generate instance and write it to the systems.txt to create it as a user.
                     cmd = "system_profiler SPHardwareDataType | grep 'Serial' | awk '{print $NF}'"
                     result = subprocess.run(cmd, stdout=subprocess.PIPE, shell=True, check=True)
                     serial_number = result.stdout.decode().strip().lower()
                     #print(serial_number)
                     fi=open("systems.txt","w+")
-                    fi.write("osx-%s" % (serial_number))
+                    fi.write("%s" % (firstuser))
                     fi.close()
 
 
