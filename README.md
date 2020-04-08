@@ -123,9 +123,21 @@ no logs will be pushed.
    *  `files`: Contains one subkey, `collect_list`, which is array of objects with the following keys:
 
       *  `file_path`: Full path to the log file to push to CloudWatch
+      *  `include_patterns`: List of regular expressions that, if provided, must match a log line for
+         it to be included in the push to CloudWatch
+      *  `exclude_patterns`: List of regular expressions that, if provided, must not match a log line
+         for it to be included in the push; exclude patterns take priority over include patterns when
+         both are provided
 
-   *  `journal`: If set to true, and if the instance supports it, pushes the system journal to the log
-      using the `journalctl` command.
+
+   *  `journal`: If provided, and if the instance supports it, pushes the system journal to the log
+      using the `journalctl` command. The following subkeys are supported:
+
+      *  `include_patterns`: List of regular expressions that, if provided, must match a log line for
+         it to be included in the push to CloudWatch
+      *  `exclude_patterns`: List of regular expressions that, if provided, must not match a log line
+         for it to be included in the push; exclude patterns take priority over include patterns when
+         both are provided
 
 *  `log_group_name`: Identifier to use for the log group under which each log file will be
    published. Should be unique per instance. The easiest way to do this is to put `{instance_id}`
