@@ -317,11 +317,12 @@ def handle_log_file(file_path, name):
         log_table[name]['Queue'].put(event)
 
 
-def create_log_group(cloudwatch_logs, log_group_name):
+def create_log_group(cloudwatch_logs, log_group_name, log_retention):
     """
     Create the log group for this system, if it does not already exist.
     @param cloudwatch_logs: Boto3 client for logs
     @param log_group_name: Identifier for the log group to be created
+    @param log_retention: Desired log retention in days
     """
     logging.info('Log group name is {0}'.format(log_group_name))
     try:
@@ -329,6 +330,13 @@ def create_log_group(cloudwatch_logs, log_group_name):
         logging.debug('Create log group response: {0}'.format(response))
     except Exception as error:
         logging.debug('Unable to create log group: {0}'.format(error))
+    if log_retention:
+        logging.info('Retaining logs in {0} for {1} days'.format(log_group_name, log_retention))
+        try:
+            response = cloudwatch_logs.put_retention_policy(logGroupName=log_group_name, retentionInDays=log_retention)
+            logging.debug('Put retention policy response: {0}'.format(response))
+        except Exception as error:
+            logging.debug('Unable to set retention policy: {0}'.format(error))
 
 
 def create_log_stream(cloudwatch_logs, log_group_name, log_stream_name):
@@ -384,7 +392,8 @@ def initialize_log_table():
     cloudwatch_logs = client_session.client('logs')
     log_group_name = config['logs'].get('log_group_name', DEFAULT_LOGS_GROUP_NAME)
     log_group_name = log_group_name.format(instance_id=instance_id)
-    create_log_group(cloudwatch_logs, log_group_name)
+    log_retention = config['logs'].get('retention_in_days')
+    create_log_group(cloudwatch_logs, log_group_name, log_retention)
     log_stream_list = get_log_stream_list()
     for file_path, name in log_stream_list:
         initialize_log_item(cloudwatch_logs, log_group_name, file_path, name)

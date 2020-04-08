@@ -132,6 +132,10 @@ no logs will be pushed.
    in the string somewhere, which the script will replace with the computed instance ID. Defaults
    to `/system/default/{instance_id}` if not provided.
 
+*  `retention_in_days`: Number of days to retain logs; allowed values are 1, 3, 5, 7, 14, 30, 60,
+   90, 120, 150, 180, 365, 400, 545, 731, 1827, or 3653. If no value is provided, logs will be
+   retained indefinitely.
+
 
 ### Running
 

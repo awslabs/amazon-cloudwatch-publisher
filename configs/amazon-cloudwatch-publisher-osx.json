@@ -36,6 +36,7 @@
         ]
       }
     },
-    "log_group_name": "/system/osx/{instance_id}"
+    "log_group_name": "/system/osx/{instance_id}",
+    "retention_in_days": 7
   }
 }
