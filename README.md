@@ -112,8 +112,9 @@ be found in the Deployment section below:
 *  `thingName`: Each instance of the publisher is represented as an IoT thing; this name
    unique identifies a thing.
 
-*  `certificatePath`: Full path and filename of the X.509 certificate for the IoT thing; this
-   file should be a concatenation of both the cert and key.
+*  `certificate`: The X.509 certificate for the IoT thing. This field can either be an array with
+   two paths, to the device certificate and private key files (in that order), or it can be a single
+   path to a file which is the concatenation of both the cert and key files.
 
 #### Metrics
 

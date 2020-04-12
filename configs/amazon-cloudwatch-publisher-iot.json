@@ -8,7 +8,10 @@
       "iotUrl": "IOT_URL",
       "roleAlias": "IOT_ROLE_ALIAS",
       "thingName": "IOT_THING_NAME",
-      "certificatePath": "IOT_CERT_PATH_AND_FILENAME"
+      "certificate": [
+        "IOT_CERT_PATH_AND_FILENAME",
+        "IOT_KEY_PATH_AND_FILENAME"
+      ]
     },
     "region": "REGION",
     "metrics_collection_interval": 60,

@@ -160,7 +160,7 @@ def get_credentials_iot():
     endpoint = config['agent']['authentication']['iotUrl']
     role_alias = config['agent']['authentication']['roleAlias']
     thing_name = config['agent']['authentication']['thingName']
-    certificate = config['agent']['authentication']['certificatePath']
+    certificate = config['agent']['authentication']['certificate']
     url = f'https://{endpoint}/role-aliases/{role_alias}/credentials'
     headers = {'x-amzn-iot-thingname': thing_name}
     response = requests.get(url, headers=headers, cert=certificate)
@@ -196,7 +196,7 @@ def set_credentials():
     if 'password' in authentication:
         logging.info('Acquiring credentials using Cognito username/password')
         credentials = get_credentials_cognito()
-    elif 'certificatePath' in authentication:
+    elif 'certificate' in authentication:
         logging.info('Acquiring credentials using IoT X.509 certificate')
         credentials = get_credentials_iot()
     else:
