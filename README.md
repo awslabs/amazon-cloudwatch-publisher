@@ -7,36 +7,24 @@ the [CloudWatch Agent](https://docs.aws.amazon.com/AmazonCloudWatch/latest/monit
 The purpose of this tool is to expand CloudWatch monitoring support to additional platforms, essentially any that
 can run Python. It has been explicitly tested on (and includes daemon installers for) MacOS and the Raspberry Pi.
 
+It supports authentication using locally-stored AWS credentials, a Cognito user, or IoT X.509 certificates.
+
 
 ## Getting Started
 
 
 ### Prerequisites
 
-To do local development, the following tools are required:
+The publisher itself requires the following runtime dependencies:
 
-*  Node >=10.3.0 (for the AWS CDK)
-*  Python 3 with pip (for the script itself)
+*  Python 3 with pip
 *  A shell with the `tail` command available (which the script uses to watch log files)
-
-To install the AWS CDK, which is used to deploy the Cognito infrastructure used for
-authentication, run the following:
+*  A number of Python packages, install with the following:
 
 ```bash
-npm i -g aws-cdk
+pip3 install boto3 psutil requests timeloop
 ```
 
-To install the Python-related development dependencies, run the following:
-
-```bash
-pip3 install passgen aws-cdk.core aws-cdk.aws-cognito aws-cdk.aws-iam
-```
-
-And finally install the runtime dependencies:
-
-```bash
-pip3 install boto3 psutil timeloop
-```
 
 ### Installation
 
@@ -64,23 +52,7 @@ This section contains general configuration for the script. All keys are optiona
    a dash to form the final identifier (e.g. `osx-c02v41p2hv2f`). If this key is not provided, a
    default of `sys-000000000000` is used, which is okay for testing but not suitable for production.
 
-*  `authentication`: If specified, must contain the below five subkeys that define authentication
-   via Cognito. If not provided, the script will use AWS credentials specified the typical way,
-   e.g. via environment variable or the `~/.aws/credentials` file, see additional info in the
-   [AWS CLI documentation](https://docs.aws.amazon.com/cli/latest/userguide/cli-chap-configure.html).
-   All these values are output by the deployment script (more details in the Deployment section below).
-
-   *  `accountId`: The 12 digit AWS account ID to authenticate into.
-
-   *  `userPoolId`: The Cognito user pool identifier, e.g. us-east-1_xxxxxxxxx.
-
-   *  `identityPoolId`: The Cognito identity pool identifier, e.g. us-east-1:00000000-0000-0000-0000-000000000000.
-
-   *  `appClientId`: The Cognito user pool app client identifier, e.g. a1b2c3d4e5f6g7h8i9j0k1l2m3
-
-   *  `password`: The random password for the associated Cognito username that matches this system's unique
-      instance identifier. This will be output only once from the deployment script so be sure to grab it,
-      else the user will need to be re-created.
+*  `authentication`: See the next subsection for details on the authentication options.
 
 *  `region`: AWS region identifier (e.g. `us-west-2`) to which metrics and logs should be published. This
    value is required only if the above `authentication` section is provided, otherwise it is ignored and
@@ -103,6 +75,45 @@ This section contains general configuration for the script. All keys are optiona
 
 *  `debug`: When `true`, includes additional information in the above log. Defaults to `false`, which
    is recommended for normal operation.
+
+#### Authentication
+
+For non-production or testing of the publisher, omit the `authentication` key from the config altogether,
+ad the script will use the AWS credentials stored in the usual way (i.e. files in
+the `.aws` folder under the home folder) See the [AWS CLI documentation](https://docs.aws.amazon.com/cli/latest/userguide/cli-chap-configure.html) for more details.
+
+For Cognito authentication, the following subkeys should be included under `authentication`
+(an example of which is in the `configs/amazon-cloudwatch-publisher-osx.json` file). All values
+are printed when the `deploy-cognito.py` script is run to configure the authentication back-end
+(more details in the Deployment section below):
+
+*  `accountId`: The 12 digit AWS account ID to authenticate into.
+
+*  `userPoolId`: The Cognito user pool identifier, e.g. us-east-1_xxxxxxxxx.
+
+*  `identityPoolId`: The Cognito identity pool identifier, e.g. us-east-1:00000000-0000-0000-0000-000000000000.
+
+*  `appClientId`: The Cognito user pool app client identifier, e.g. a1b2c3d4e5f6g7h8i9j0k1l2m3
+
+*  `password`: The random password for the associated Cognito username that matches this system's unique
+   instance identifier. This will be output only once from the deployment script so be sure to grab it,
+   else the user will need to be re-created.
+
+For IoT X.509 authentication, the following subkeys should be included (an example of which is in
+the `configs/amazon-cloudwatch-publisher-iot.json` file). More details on all these values can
+be found in the Deployment section below:
+
+*  `iotUrl`: The IoT endpoint for the AWS account, obtainable by running
+   `aws iot describe-endpoint --endpoint-type iot:CredentialProvider`.
+
+*  `roleAlias`: Alias to the role the script will assume when authenticating; this role must have
+   a policy with sufficient permissions (see the list in the Running section below)
+
+*  `thingName`: Each instance of the publisher is represented as an IoT thing; this name
+   unique identifies a thing.
+
+*  `certificatePath`: Full path and filename of the X.509 certificate for the IoT thing; this
+   file should be a concatenation of both the cert and key.
 
 #### Metrics
 
@@ -175,18 +186,25 @@ production for a number of reasons:
 *  Credentials would either have to be shared across systems or each system would require its own IAM user, which
    is both a security and management challenge
 
-Instead when used in production the script should authenticate as a Cognito user. To set this up requires creating
-some resources, which can be done by executing the `deploy.py` script using AWS credentials that have full permissions
-to run CloudFormation and create Cognito user and identity pools (basically Admin permission). Normally this step
-should be run on a system separate from those on which the publisher will run.
+Instead when used in production the script should use either the Cognito or IoT X.509 methods, both of which
+require some additional steps to set up their respective infrastructure. These steps should be performed on
+a system separate from those on which the publisher itself will run, since they require locally-configured
+AWS credentials with full permissions to run CloudFormation, create Cognito items, and create IoT devices
+and certificates.
 
 
-### Infrastructure
+### Cognito
 
-The deploy process executes by running `./deploy.py`, which uses the [AWS CDK](https://aws.amazon.com/cdk)
+If using the Cognito authentication solution, the following tools are required:
+
+*  Node >=10.3.0
+*  AWS CDK (installed with `npm i -g aws-cdk`)
+*  Additional Python packages (installed with `pip3 install aws-cdk.core aws-cdk.aws-cognito aws-cdk.aws-iam passgen`)
+
+The deploy process executes by running `./deploy-cognito.py`, which uses the [AWS CDK](https://aws.amazon.com/cdk)
 to create the required infrastructure via code in the `infrastructure` folder. It also creates a set of
 users by reading from a text file named `systems.txt`. This file should contain a list of instance identifiers,
-one per line, that correspond to the systems that will authenticate into Cognito.
+one per line, that correspond to the systems running the publisher that will authenticate into Cognito.
 
 The `systems.txt` file must exist, or the deployment will fail. Furthermore, the script will only add systems
 to the user pool that don't already exist.
@@ -194,6 +212,14 @@ to the user pool that don't already exist.
 After execution, the deployment script prints the passwords generated for each new user, but only for new users,
 so be sure to copy them elsewhere so they can be specified during each system's installation. The script will
 also print several other identifiers that will be needed.
+
+
+### IoT X.509
+
+To use the AWS IoT Credentials Provider to authenticate via X.509, follow the instructions in this
+[blog post](https://aws.amazon.com/blogs/security/how-to-eliminate-the-need-for-hardcoded-aws-credentials-in-devices-by-using-the-aws-iot-credentials-provider/)
+to set up the necessary configuration, and note the required values which then are added to the publisher
+configuration's `authentication` section as described in the Installation section above.
 
 
 ### Installing
@@ -207,6 +233,7 @@ on the following platforms:
 To use these scripts, copy the repo files to the system and execute the corresponding script with `sudo`.
 When prompted, enter the appropriate values from the deployment step above. The daemon will start
 when installation is done, and on all subsequent reboots.
+
 
 ### Uninstalling
 
