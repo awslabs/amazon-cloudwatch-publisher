@@ -368,13 +368,15 @@ def handle_log_file(file_path, name, include, exclude):
         # An empty response indicates the process is terminating
         if not message:
             return
+        # Trim any newlines so a blank line can be detected below
+        message = message.strip()
         include = not include_patterns or any(p.search(message) for p in include_patterns)
         exclude = exclude_patterns and any(p.search(message) for p in exclude_patterns)
-        if include and not exclude:
+        if message and include and not exclude:
             # Instead of trying to parse a timestamp from the log line, just note the time it
             # was tailed (in epoch milliseconds); this should be close enough for most purposes
             timestamp = int(time.time() * 1000)
-            event = {'timestamp': timestamp, 'message': message.strip()}
+            event = {'timestamp': timestamp, 'message': message}
             log_table[name]['Queue'].put(event)
 
 
