@@ -484,14 +484,29 @@ def push_log_data():
     """Loop through all log files, find new events, and push them to CloudWatch."""
     cloudwatch_logs = client_session.client('logs')
     for name, log_item in log_table.items():
+        _safely_get_and_push_log_events(cloudwatch_logs, name, log_item)
+
+
+def _safely_get_and_push_log_events(cloudwatch_logs, name, log_item):
+    """ Safely get and push log events and catch exceptions, logging a warning.
+    @param cloudwatch_logs: Boto3 client for logs
+    @param name: name of log file to check for events
+    @param log_item: Particular log file to check for events
+    """
+    try:
         log_events = get_log_events(name, log_item)
         # Don't bother hitting the API if there are no events to report
-        if log_events:
-            log_item['Data']['logEvents'] = log_events
-            logging.debug('Putting log events: {0}'.format(log_events))
-            response = cloudwatch_logs.put_log_events(**log_item['Data'])
-            logging.debug('Put log events response: {0}'.format(response))
-            log_item['Data']['sequenceToken'] = response['nextSequenceToken']
+        if not log_events:
+            return
+        log_item['Data']['logEvents'] = log_events
+        logging.debug('Putting log events: {0}'.format(log_events))
+        response = cloudwatch_logs.put_log_events(**log_item['Data'])
+        logging.debug('Put log events response: {0}'.format(response))
+        log_item['Data']['sequenceToken'] = response['nextSequenceToken']
+    except Exception as error:
+        logging.warning(
+            'Error while putting log events for file {0}: {1}'.format(name,
+                                                                      error))
 
 
 # Do one-time setup functions
