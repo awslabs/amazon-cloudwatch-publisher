@@ -489,11 +489,14 @@ def push_log_data():
         log_events = get_log_events(name, log_item)
         # Don't bother hitting the API if there are no events to report
         if log_events:
-            log_item['Data']['logEvents'] = log_events
-            logging.debug('Putting log events: {0}'.format(log_events))
-            response = cloudwatch_logs.put_log_events(**log_item['Data'])
-            logging.debug('Put log events response: {0}'.format(response))
-            log_item['Data']['sequenceToken'] = response['nextSequenceToken']
+            try:
+                log_item['Data']['logEvents'] = log_events
+                logging.debug('Putting log events: {0}'.format(log_events))
+                response = cloudwatch_logs.put_log_events(**log_item['Data'])
+                logging.debug('Put log events response: {0}'.format(response))
+                log_item['Data']['sequenceToken'] = response['nextSequenceToken']
+            except Exception as error:
+                logging.warning('Error while putting log events: {0}'.format(error))
 
 
 # Do one-time setup functions
