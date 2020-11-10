@@ -120,8 +120,8 @@ def set_instance_id():
     if not serial:
         # If no command is given simply use a bunch of zeros for the serail number
         command = instance.get('command', 'echo 000000000000')
-        output = subprocess.run(command, shell=True, capture_output=True, encoding='UTF-8')
-        serial = output.stdout.strip().lower()
+        output = subprocess.run(command, shell=True, stdout=subprocess.PIPE)
+        serial = output.stdout.decode('utf-8').strip().lower()
     # Set the shared variable to the generated ID; this is easier than passing it
     # around everywhere, and more performance than re-generating it in multiple places
     global instance_id
@@ -161,7 +161,7 @@ def get_credentials_iot():
     role_alias = config['agent']['authentication']['roleAlias']
     thing_name = config['agent']['authentication']['thingName']
     certificate = config['agent']['authentication']['certificate']
-    url = f'https://{endpoint}/role-aliases/{role_alias}/credentials'
+    url = 'https://{}/role-aliases/{}/credentials'.format(endpoint, role_alias)
     headers = {'x-amzn-iot-thingname': thing_name}
     response = requests.get(url, headers=headers, cert=certificate)
     credentials = response.json()['credentials']
@@ -357,14 +357,14 @@ def handle_log_file(file_path, name, include, exclude):
     # edge cases like rotation and files that don't exist at the start
     else:
         tail_command = ('tail', '-n', '0', '-F', file_path)
-    output = subprocess.Popen(tail_command, stdout=subprocess.PIPE, encoding='UTF-8')
+    output = subprocess.Popen(tail_command, stdout=subprocess.PIPE)
     # Compile the include/exclude patterns for better performance
     include_patterns = [re.compile(p) for p in include]
     exclude_patterns = [re.compile(p) for p in exclude]
     # Loop forever reading lines one at a time from the file and
     # adding them to the queue of lines to be sent to CloudWatch
     while True:
-        message = output.stdout.readline()
+        message = output.stdout.readline().decode('utf-8')
         # An empty response indicates the process is terminating
         if not message:
             return
