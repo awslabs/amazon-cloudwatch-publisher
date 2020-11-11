@@ -323,9 +323,9 @@ def get_log_stream_list():
     """
     try:
         collect_list = config['logs']['logs_collected']['files']['collect_list']
-        log_file_paths = [l['file_path'] for l in collect_list]
-        include_patterns_list = [l.get('include_patterns', []) for l in collect_list]
-        exclude_patterns_list = [l.get('exclude_patterns', []) for l in collect_list]
+        log_file_paths = [c['file_path'] for c in collect_list]
+        include_patterns_list = [c.get('include_patterns', []) for c in collect_list]
+        exclude_patterns_list = [c.get('exclude_patterns', []) for c in collect_list]
         journal = config['logs']['logs_collected'].get('journal', {})
         if journal.get('collect'):
             log_file_paths.append(SYSTEM_JOURNAL_FLAG)
