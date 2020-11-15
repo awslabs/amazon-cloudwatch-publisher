@@ -1,0 +1,24 @@
+{
+  "agent": {
+    "instance": {
+      "prefix": "mi",
+      "command": "sudo cat /var/lib/amazon/ssm/registration | grep -E --only-matching 'mi-[0-9a-f]+' | grep -E --only-matching '[0-9a-f]+'"
+    },
+    "authentication": {
+      "accountId": "ACCOUNT_ID",
+      "userPoolId": "USER_POOL_ID",
+      "identityPoolId": "IDENTITY_POOL_ID",
+      "appClientId": "APP_CLIENT_ID",
+      "password": "PASSWORD"
+    },
+    "region": "REGION",
+    "metrics_collection_interval": 60,
+    "logs_collection_interval": 10,
+    "logfile": "amazon-cloudwatch-publisher.log",
+    "debug": false
+  },
+  "metrics": {
+    "namespace": "System/ManagedInstance"
+  },
+  "logs": {}
+}
