@@ -75,12 +75,15 @@ try:
 except IndexError:
     config_filename = DEFAULT_CONFIG_FILENAME
 
-# If the config file cannot be opened, set up a default config object
-# which allows simplication of the subsequent config value reading code
+# Set up a default config object which allows simplication of the subsequent
+# config value reading code
+config = {'agent': {}, 'metrics': {}, 'logs': {}}
+
+# If we can open the config file, overwrite any default data with what's in it
 try:
-    config = json.load(open(config_filename))
+    config.update(json.load(open(config_filename)))
 except OSError:
-    config = {'agent': {}, 'metrics': {}, 'logs': {}}
+    pass
 
 
 # Read a few config values, setting defaults if not provided
