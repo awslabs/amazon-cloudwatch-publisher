@@ -22,7 +22,7 @@ The publisher itself requires the following runtime dependencies:
 *  A number of Python packages, install with the following:
 
 ```bash
-pip3 install boto3 psutil requests timeloop
+pip3 install -r requirements.txt
 ```
 
 

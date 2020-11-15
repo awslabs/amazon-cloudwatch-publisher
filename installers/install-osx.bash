@@ -7,7 +7,7 @@ sysadminctl -addUser _cwpublisher -admin
 
 
 # Install dependencies
-pip3 install boto3 psutil timeloop
+pip3 install -r requirements.txt
 
 
 # Create folders and copy source and config
