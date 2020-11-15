@@ -56,7 +56,7 @@ DEFAULT_METRICS_INTERVAL = 300
 DEFAULT_NAMESPACE = 'System/Default'
 
 DEFAULT_LOGS_INTERVAL = 10
-DEFAULT_LOGS_GROUP_NAME = '/system/default/{instance}'
+DEFAULT_LOGS_GROUP_NAME = '/system/default/{instance_id}'
 
 # This value matches the maximum number of log streams that can be
 # queried in a single API call; while that could be fixed with looping,
