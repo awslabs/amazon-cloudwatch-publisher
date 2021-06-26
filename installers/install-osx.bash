@@ -2,7 +2,7 @@
 set -e
 
 
-# Create a user for the script
+# Create a user for the script with sudo powers
 sysadminctl -addUser _cwpublisher -admin
 
 

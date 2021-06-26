@@ -2,8 +2,12 @@
 set -e
 
 
-# Create a user for the script
-useradd -g wheel -s /sbin/nologin cwpublisher
+# Create a user for the script and make sure it's in a group with sudo powers
+sudo_groups="sudo wheel"
+for sudo_group in $sudo_groups; do
+  getent group $sudo_group && break
+done
+useradd -g $sudo_group -s /sbin/nologin cwpublisher
 
 
 # Install dependencies
