@@ -63,9 +63,10 @@ This section contains general configuration for the script. All keys are optiona
 
 *  `logs_collection_interval`: How often (in seconds) outstanding log entries should be sent to
    CloudWatch. Defaults to 10 seconds if not provided. This needs to be set to strike a balance
-   between being too chatty and waiting to long to send logs that are rapidly generated, as there
-   is a limit on how much log data can be sent in a single call to CloudWatch, see the [put-log-events]
-   (https://docs.aws.amazon.com/cli/latest/reference/logs/put-log-events.html) doc page for details.
+   between being too chatty and waiting too long to send logs that are rapidly generated, as there
+   is a limit on how much log data can be sent in a single call to CloudWatch, see the
+   [put-log-events](https://docs.aws.amazon.com/cli/latest/reference/logs/put-log-events.html)
+   doc page for details.
 
 *  `logfile`: Full path and filename to which the publisher's own log file should be written. Defaults to
    `/opt/aws/amazon-cloudwatch-publisher/logs/amazon-cloudwatch-publisher.log` (to mimic the default agent)
@@ -79,8 +80,9 @@ This section contains general configuration for the script. All keys are optiona
 #### Authentication
 
 For non-production or testing of the publisher, omit the `authentication` key from the config altogether,
-ad the script will use the AWS credentials stored in the usual way (i.e. files in
-the `.aws` folder under the home folder) See the [AWS CLI documentation](https://docs.aws.amazon.com/cli/latest/userguide/cli-chap-configure.html) for more details.
+and the script will use the AWS credentials stored in the usual way (i.e. files in the `.aws` folder under
+the home folder) See the [AWS CLI documentation](https://docs.aws.amazon.com/cli/latest/userguide/cli-chap-configure.html)
+for more details.
 
 For Cognito authentication, the following subkeys should be included under `authentication`
 (an example of which is in the `configs/amazon-cloudwatch-publisher-osx.json` file). All values
@@ -263,10 +265,10 @@ The uninstall process is platform dependent, but for the two current platforms, 
 
 Pull requests are welcomed. Here are a few items that would be nice to get implemented:
 
+*  Add safety check to prevent publishing of the log publisher's log if debugging
 *  More installers / broader OS support and testing
 *  Automated tests of some kind
-*  Implement include and exclude patterns for logs
-*  Retention options for log groups
+*  Upgrade to CDKv2
 
 Please lint all changes with `flake8 --max-line-length=120` before submitting. Also review
 the [Contributing Guidelines](CONTRIBUTING.md) and the [Code of Conduct](CODE_OF_CONDUCT.md).
