@@ -65,7 +65,7 @@ MAX_LOGS_COLLECTION_LIST = 50
 
 # Special sentinel value that indicates a log entry represents
 # the system journal, and not a normal file to be tailed; this
-# should never matche an actual configured file to be followed
+# should never match an actual configured file to be followed
 SYSTEM_JOURNAL_FLAG = 'system-journal-flag'
 
 
@@ -353,9 +353,10 @@ def handle_log_file(file_path, name, include, exclude):
     """
     # Check if this log is the special system journal entry; if so,
     # use the journalctl system call to read its entries (since they
-    # can't be otherwise read as a normal text file)
+    # can't be otherwise read as a normal text file). The provided
+    # flags wind the output back to the start of the most recent boot.
     if file_path == SYSTEM_JOURNAL_FLAG:
-        tail_command = ('journalctl', '-q', '-n', '0', '-f')
+        tail_command = ('journalctl', '-q', '-f', '-b', '--no-tail')
     # Otherwise the normal tail command will do the job while handling
     # edge cases like rotation and files that don't exist at the start
     else:
